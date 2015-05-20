@@ -70,6 +70,7 @@ class Serializer {
 
 	var buf : StringBuf;
 	var cache : Array<Dynamic>;
+	var indices : haxe.ds.ObjectMap<Dynamic, Int>;
 	var shash : haxe.ds.StringMap<Int>;
 	var scount : Int;
 
@@ -100,6 +101,7 @@ class Serializer {
 	public function new() {
 		buf = new StringBuf();
 		cache = new Array();
+		indices = new haxe.ds.ObjectMap<Dynamic, Int>();
 		useCache = USE_CACHE;
 		useEnumIndex = USE_ENUM_INDEX;
 		shash = new haxe.ds.StringMap();
@@ -171,14 +173,9 @@ class Serializer {
 	function serializeRef(v) {
 		#if js
 		var vt = untyped __js__("typeof")(v);
-		#end
 		for( i in 0...cache.length ) {
-			#if js
 			var ci = cache[i];
 			if( untyped __js__("typeof")(ci) == vt && ci == v ) {
-			#else
-			if( cache[i] == v ) {
-			#end
 				buf.add("r");
 				buf.add(i);
 				return true;
@@ -186,9 +183,20 @@ class Serializer {
 		}
 		cache.push(v);
 		return false;
+		#else
+		var i:Null<Int> = indices.get(v);
+		if(i == null) {
+			indices.set(v, cache.length);
+			cache.push(v);
+			return false;
+		}
+		buf.add("r");
+		buf.add(i);
+		return true;
+		#end
 	}
 
-	#if flash9
+	#if flash
 	// only the instance variables
 
 	function serializeClassFields(v,c) {
@@ -258,10 +266,10 @@ class Serializer {
 			case #if (neko || cs || python) "Array" #else cast Array #end:
 				var ucount = 0;
 				buf.add("a");
-				#if (flash9 || python)
+				#if (flash || python)
 				var v : Array<Dynamic> = v;
 				#end
-				var l = #if (neko || flash9 || php || cs || java || python) v.length #elseif cpp v.__length() #else v[untyped "length"] #end;
+				var l = #if (neko || flash || php || cs || java || python) v.length #elseif cpp v.__length() #else __getField(v, "length") #end;
 				for( i in 0...l ) {
 					if( v[i] == null )
 						ucount++;
@@ -318,7 +326,7 @@ class Serializer {
 				buf.add("M");
 				var v : haxe.ds.ObjectMap<Dynamic,Dynamic> = v;
 				for ( k in v.keys() ) {
-					#if (js || flash8 || neko)
+					#if (js || neko)
 					var id = Reflect.field(k, "__id__");
 					Reflect.deleteField(k, "__id__");
 					serialize(k);
@@ -367,7 +375,7 @@ class Serializer {
 				buf.add(chars);
 			default:
 				if( useCache ) cache.pop();
-				if( #if flash9 try v.hxSerialize != null catch( e : Dynamic ) false #elseif (cs || java || python) Reflect.hasField(v, "hxSerialize") #else v.hxSerialize != null #end  ) {
+				if( #if flash try v.hxSerialize != null catch( e : Dynamic ) false #elseif (cs || java || python) Reflect.hasField(v, "hxSerialize") #else v.hxSerialize != null #end  ) {
 					buf.add("C");
 					serializeString(Type.getClassName(c));
 					if( useCache ) cache.push(v);
@@ -377,7 +385,7 @@ class Serializer {
 					buf.add("c");
 					serializeString(Type.getClassName(c));
 					if( useCache ) cache.push(v);
-					#if flash9
+					#if flash
 					serializeClassFields(v,c);
 					#else
 					serializeFields(v);
@@ -387,8 +395,8 @@ class Serializer {
 		case TObject:
 			if (Std.is(v,Class)) {
 				var className = Type.getClassName(v);
-				#if (flash9 || cpp)
-				// Currently, Enum and Class are the same for flash9 and cpp.
+				#if (flash || cpp)
+				// Currently, Enum and Class are the same for flash and cpp.
 				//  use resolveEnum to test if it is actually an enum
 				if (Type.resolveEnum(className)!=null) buf.add("B") else
 				#end
@@ -426,7 +434,7 @@ class Serializer {
 				for( i in 0...l )
 					serialize(v.args[i]);
 			}
-			#elseif flash9
+			#elseif flash
 			if( useEnumIndex ) {
 				buf.add(":");
 				var i : Int = v.index;
@@ -496,7 +504,7 @@ class Serializer {
 			} else
 				serializeString(v[0]);
 			buf.add(":");
-			var l = v[untyped "length"];
+			var l = __getField(v, "length");
 			buf.add(l - 2);
 			for( i in 2...l )
 				serialize(v[i]);
@@ -516,9 +524,11 @@ class Serializer {
 		}
 	}
 
+	@:extern inline function __getField(o:Dynamic, f:String):Dynamic return untyped o[f];
+
 	public function serializeException( e : Dynamic ) {
 		buf.add("x");
-		#if flash9
+		#if flash
 		if( untyped __is__(e,__global__["Error"]) ) {
 			var e : flash.errors.Error = e;
 			var s = e.getStackTrace();

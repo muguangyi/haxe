@@ -26,18 +26,16 @@
 	If the first argument to any of the methods is null, the result is
 	unspecified.
 **/
-#if cs
-@:keep
+#if cpp
+using cpp.NativeString;
 #end
 class StringTools {
 	/**
 		Encode an URL by using the standard format.
 	**/
 	#if (!java && !cpp) inline #end public static function urlEncode( s : String ) : String {
-		#if flash9
+		#if flash
 			return untyped __global__["encodeURIComponent"](s);
-		#elseif flash
-			return untyped _global["escape"](s);
 		#elseif neko
 			return untyped new String(_urlEncode(s.__s));
 		#elseif js
@@ -49,9 +47,9 @@ class StringTools {
 				return untyped __java__("java.net.URLEncoder.encode(s, \"UTF-8\")")
 			catch (e:Dynamic) throw e;
 		#elseif cs
-			return untyped cs.system.Uri.EscapeUriString(s);
+			return untyped cs.system.Uri.EscapeDataString(s);
 		#elseif python
-			return python.lib.urllib.Parse.quote(s);
+			return python.lib.urllib.Parse.quote(s, "");
 		#else
 			return null;
 		#end
@@ -61,10 +59,8 @@ class StringTools {
 		Decode an URL using the standard format.
 	**/
 	#if (!java && !cpp) inline #end public static function urlDecode( s : String ) : String {
-		#if flash9
+		#if flash
 			return untyped __global__["decodeURIComponent"](s.split("+").join(" "));
-		#elseif flash
-			return untyped _global["unescape"](s);
 		#elseif neko
 			return untyped new String(_urlDecode(s.__s));
 		#elseif js
@@ -133,6 +129,15 @@ class StringTools {
 		return untyped s.startsWith(start);
 		#elseif cs
 		return untyped s.StartsWith(start);
+		#elseif cpp
+		if (s.length<start.length)
+			return false;
+		var p0 = s.c_str();
+		var p1 = start.c_str();
+		for(i in 0...start.length)
+			if ( p0.at(i) != p1.at(i) )
+				return false;
+		return true;
 		#else
 		return( s.length >= start.length && s.substr(0, start.length) == start );
 		#end
@@ -150,6 +155,15 @@ class StringTools {
 		return untyped s.endsWith(end);
 		#elseif cs
 		return untyped s.EndsWith(end);
+		#elseif cpp
+		if (s.length<end.length)
+			return false;
+		var p0 = s.c_str().add( s.length-end.length );
+		var p1 = end.c_str();
+		for(i in 0...end.length)
+			if ( p0.at(i) != p1.at(i) )
+				return false;
+		return true;
 		#else
 		var elen = end.length;
 		var slen = s.length;
@@ -318,7 +332,7 @@ class StringTools {
 		its length equals `digits`.
 	**/
 	public static function hex( n : Int, ?digits : Int ) {
-		#if flash9
+		#if flash
 			var n : UInt = n;
 			var s : String = untyped n.toString(16);
 			s = s.toUpperCase();
@@ -364,10 +378,8 @@ class StringTools {
 		return untyped __dollar__sget(s.__s, index);
 		#elseif cpp
 		return untyped s.cca(index);
-		#elseif flash9
-		return untyped s.cca(index);
 		#elseif flash
-		return untyped s["cca"](index);
+		return untyped s.cca(index);
 		#elseif java
 		return ( index < s.length ) ? cast(_charAt(s, index), Int) : -1;
 		#elseif cs
@@ -375,7 +387,7 @@ class StringTools {
 		#elseif js
 		return (untyped s).charCodeAt(index);
 		#elseif python
-		return if (index >= s.length) -1 else python.lib.Builtin.ord(python.Syntax.arrayAccess(s, index));
+		return if (index >= s.length) -1 else python.internal.UBuiltins.ord(python.Syntax.arrayAccess(s, index));
 		#else
 		return untyped s.cca(index);
 		#end
@@ -385,10 +397,8 @@ class StringTools {
 		Tells if `c` represents the end-of-file (EOF) character.
 	*/
 	@:noUsing public static inline function isEof( c : Int ) : Bool {
-		#if (flash9 || cpp)
+		#if (flash || cpp)
 		return c == 0;
-		#elseif flash8
-		return c <= 0; // fast NaN
 		#elseif js
 		return c != c; // fast NaN
 		#elseif neko
